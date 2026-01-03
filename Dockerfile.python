@@ -1,0 +1,12 @@
+FROM python:3.9-slim
+
+WORKDIR /app
+
+COPY data-generator/requirements.txt /app/requirements-generator.txt
+COPY kafka/requirements.txt /app/requirements-kafka.txt
+
+RUN pip install -r requirements-generator.txt && pip install -r requirements-kafka.txt
+
+COPY . /app
+
+CMD ["python", "data-generator/traffic_generator.py"]

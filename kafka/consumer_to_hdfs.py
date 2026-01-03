@@ -1,0 +1,83 @@
+from kafka import KafkaConsumer
+from hdfs import InsecureClient
+import json
+import time
+import os
+import datetime
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Config
+KAFKA_TOPIC = "traffic-events"
+BOOTSTRAP_SERVERS = os.getenv('BOOTSTRAP_SERVERS', 'localhost:9092').split(',')
+HDFS_URL = os.getenv('HDFS_URL', "http://localhost:9870") # WebHDFS
+HDFS_USER = "root"
+BUFFER_SIZE = 100
+FLUSH_INTERVAL = 60 # seconds
+
+def get_hdfs_client():
+    try:
+        return InsecureClient(HDFS_URL, user=HDFS_USER)
+    except Exception as e:
+        logger.error(f"Could not connect to HDFS: {e}")
+        return None
+
+def flush_to_hdfs(client, buffer):
+    if not buffer:
+        return
+    
+    # Partition by Date
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+    hdfs_path = f"/data/raw/traffic/date={today}"
+    
+    # Create filename with timestamp
+    filename = f"traffic_data_{int(time.time())}.json"
+    full_path = f"{hdfs_path}/{filename}"
+    
+    data_str = "\n".join([json.dumps(r) for r in buffer])
+    
+    try:
+        # Check if dir exists, if not, careful (write usually creates, but with client.write it might need handling)
+        # client.write creates file.
+        with client.write(full_path, encoding='utf-8') as writer:
+            writer.write(data_str)
+        logger.info(f"Flushed {len(buffer)} records to {full_path}")
+    except Exception as e:
+        logger.error(f"Failed to write to HDFS: {e}")
+
+def main():
+    consumer = KafkaConsumer(
+        KAFKA_TOPIC,
+        bootstrap_servers=BOOTSTRAP_SERVERS,
+        auto_offset_reset='earliest',
+        enable_auto_commit=True,
+        group_id='hdfs-archiver',
+        value_deserializer=lambda x: json.loads(x.decode('utf-8'))
+    )
+
+    client = get_hdfs_client()
+    # Retry connection
+    while not client:
+        logger.warning("Waiting for HDFS...")
+        time.sleep(5)
+        client = get_hdfs_client()
+
+    buffer = []
+    last_flush = time.time()
+
+    logger.info("Starting Kafka to HDFS consumer...")
+    
+    for message in consumer:
+        event = message.value
+        buffer.append(event)
+        
+        current_time = time.time()
+        if len(buffer) >= BUFFER_SIZE or (current_time - last_flush) >= FLUSH_INTERVAL:
+            flush_to_hdfs(client, buffer)
+            buffer = []
+            last_flush = current_time
+
+if __name__ == "__main__":
+    main()
