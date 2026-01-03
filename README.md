@@ -12,7 +12,7 @@ graph LR
     
     subgraph "Ingestion & Stockage"
         B -->|Consommateur Python| C[HDFS<br/>/data/raw/traffic]
-        C -->|Parquet| HDFS_RAW[Fichiers Raw<br/>(Partitionnés par Date)]
+        C -->|Parquet| HDFS_RAW["Fichiers Raw<br/>(Partitionnés par Date)"]
     end
     
     subgraph "Traitement & Analytics"
