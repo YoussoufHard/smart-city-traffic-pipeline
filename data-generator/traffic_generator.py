@@ -15,47 +15,51 @@ import os
 # Constants
 TOPIC_NAME = "traffic-events"
 BOOTSTRAP_SERVERS = os.getenv('BOOTSTRAP_SERVERS', 'localhost:9092').split(',')
+
+# Enriched sensor list to meet assignment requirements
 SENSOR_LOCATIONS = [
-    {"sensor_id": "S-001", "lat": 48.8566, "lon": 2.3522}, # Paris
-    {"sensor_id": "S-002", "lat": 48.8606, "lon": 2.3376},
-    {"sensor_id": "S-003", "lat": 48.8530, "lon": 2.3499},
-    {"sensor_id": "S-004", "lat": 48.8588, "lon": 2.3200},
-    {"sensor_id": "S-005", "lat": 48.8647, "lon": 2.3780},
-    {"sensor_id": "S-006", "lat": 34.0208, "lon": -6.8416}, # Rabat
-    {"sensor_id": "S-007", "lat": 33.5731, "lon": -7.5898}, # Casablanca
+    {"sensor_id": "S-001", "road_id": "R-001", "road_type": "autoroute", "zone": "Secteur-Nord", "lat": 48.8566, "lon": 2.3522},
+    {"sensor_id": "S-002", "road_id": "R-002", "road_type": "avenue", "zone": "Secteur-Centre", "lat": 48.8606, "lon": 2.3376},
+    {"sensor_id": "S-003", "road_id": "R-003", "road_type": "rue", "zone": "Secteur-Sud", "lat": 48.8530, "lon": 2.3499},
+    {"sensor_id": "S-004", "road_id": "R-004", "road_type": "autoroute", "zone": "Secteur-Nord", "lat": 48.8588, "lon": 2.3200},
+    {"sensor_id": "S-005", "road_id": "R-005", "road_type": "avenue", "zone": "Secteur-Est", "lat": 48.8647, "lon": 2.3780},
 ]
 
 def get_traffic_density():
     """Returns a multiplier (0.1 to 1.0) based on time of day to simulate peak hours."""
     hour = datetime.datetime.now().hour
     if 7 <= hour <= 9 or 17 <= hour <= 19:
-        return 1.0 # Peak
+        return 0.9 # Peak
     elif 10 <= hour <= 16:
-        return 0.7 # Normal day
+        return 0.6 # Normal day
     else:
         return 0.2 # Night
 
 def generate_event(sensor):
     traffic_factor = get_traffic_density()
     
-    # Speed is inversely proportional to traffic density (simplified)
-    # Peak hour = slower speeds.
-    base_speed = 50 # km/h
+    # Values generation
+    # Peak hour = slower speeds + more vehicles.
     if traffic_factor > 0.8:
-        speed = random.normalvariate(15, 5) # Congestion
+        speed = random.normalvariate(20, 10) # Congestion
+        vehicle_count = random.randint(50, 150)
     else:
-        speed = random.normalvariate(base_speed, 10)
+        speed = random.normalvariate(60, 15)
+        vehicle_count = random.randint(5, 40)
     
-    speed = max(0, speed)
+    speed = max(5, speed)
+    occupancy = min(100, (vehicle_count / 200) * 100 + random.uniform(0, 10))
     
     return {
-        "event_id": str(uuid.uuid4()),
         "sensor_id": sensor["sensor_id"],
-        "location": {"lat": sensor["lat"], "lon": sensor["lon"]},
-        "timestamp": datetime.datetime.now().isoformat(),
-        "vehicle_type": random.choice(["car", "car", "car", "truck", "bus", "motorcycle"]),
-        "speed": round(speed, 2),
-        "traffic_density_factor": traffic_factor
+        "road_id": sensor["road_id"],
+        "road_type": sensor["road_type"],
+        "zone": sensor["zone"],
+        "vehicle_count": vehicle_count,
+        "average_speed": round(speed, 2),
+        "occupancy_rate": round(occupancy, 2),
+        "event_time": datetime.datetime.now().isoformat(),
+        "location": {"lat": sensor["lat"], "lon": sensor["lon"]} # Added for Viz
     }
 
 def main():
